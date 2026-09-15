@@ -1,4 +1,4 @@
-Installation:
+**Installation:**
 
 1. Architecture Overview
 * The Main App (bigfix): Installed on the Search Head. Contains the UI, dashboards, navigation, and custom icons.
