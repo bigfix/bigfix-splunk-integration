@@ -1,6 +1,9 @@
 App Name: HCL BigFix App for Splunk
-Version: 1.0.0 
-Author: BigFix Professional Services 
+
+Version: 1.0.0
+
+Author: BigFix Professional Services
+
 Description: Comprehensive monitoring for BigFix Infrastructure, Inventory, Compliance, Remote Control, and Security Auditing.
 
 1. Architecture Overview
