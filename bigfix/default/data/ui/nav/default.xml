@@ -1,0 +1,25 @@
+<nav search_view="search" color="#000000">
+  <view name="search" default="true" />
+  
+  <collection label="Infrastructure Health">
+    <view name="bigfix_root_besrelay_health" />
+    <view name="bigfix_filldb_health" />
+    <view name="bigfix_gatherdb_health" />
+    <view name="bigfix_webreports_health_performance" />
+    <view name="bigfix_webui_health_performance" />
+    <view name="bigfix_relay_health" />
+    <view name="bigfix_tools" />
+  </collection>
+
+  <collection label="ETL &amp; Application Health">
+    <view name="bigfix_inventory_etl_health" />
+    <view name="bigfix_compliance_etl_health" />
+    <view name="bigfix_remote_control_health_performance" />
+    <view name="bigfix_webui_insights_import" />
+  </collection>
+
+  <collection label="Security &amp; Audit">
+    <view name="bigfix_security_governance" />
+    <view name="bigfix_operator_audit" />
+  </collection>
+</nav>

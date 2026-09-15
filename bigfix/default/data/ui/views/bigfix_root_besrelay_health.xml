@@ -1,0 +1,137 @@
+<dashboard version="1.1" theme="dark">
+  <label>BigFix Root Server (BESRelay) Health</label>
+  <description>Core health monitoring for Database Connectivity, HTTP Gather operations, Site Entitlements, and Service Uptime</description>
+
+  <fieldset submitButton="false">
+    <input type="time" token="global_time">
+      <label>Time Range</label>
+      <default>
+        <earliest>-7d@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+  </fieldset>
+
+  <row>
+    <panel>
+      <title>BES Root Service Status (Last known)</title>
+      <single>
+        <search>
+          <query>index=bigfix sourcetype="bigfix:root:besrelay"
+| head 1
+| eval Status=if(match(_raw, "(?i)stopping|shutting down"), "DOWN", "UP")
+| table Status</query>
+          <earliest>0</earliest>
+          <latest>$global_time.latest$</latest>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Total Critical Errors (Time Range)</title>
+      <single>
+        <search>
+          <query>index=bigfix sourcetype="bigfix:root:besrelay" ("Database Error" OR "HTTP Error" OR "GetURL failure" OR "Unable to find site id" OR "entitlement expired")
+| stats count</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="useColors">1</option>
+        <option name="rangeColors">["0x53a051","0xf8be34","0xdc4e41"]</option>
+        <option name="rangeValues">[10,100]</option>
+        <option name="drilldown">all</option>
+        <drilldown>
+          <link target="_blank">search?q=index=bigfix sourcetype="bigfix:root:besrelay" ("Database Error" OR "HTTP Error" OR "GetURL failure" OR "Unable to find site id" OR "entitlement expired")&amp;earliest=$earliest$&amp;latest=$latest$</link>
+        </drilldown>
+      </single>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Error Breakdown Over Time</title>
+      <chart>
+        <search>
+          <query>index=bigfix sourcetype="bigfix:root:besrelay" ("Database Error" OR "HTTP Error" OR "GetURL failure" OR "Unable to find site id" OR "entitlement expired")
+| eval Error_Category=case(
+    match(_raw, "Database Error"), "Database / SQL",
+    match(_raw, "HTTP Error|GetURL failure"), "HTTP / Network Timeouts",
+    match(_raw, "Unable to find site id"), "Missing Custom Site IDs",
+    match(_raw, "entitlement expired"), "Site Entitlement Expired",
+    true(), "Other")
+| timechart count by Error_Category</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.drilldown">all</option>
+        <drilldown>
+          <link target="_blank">search?q=index=bigfix sourcetype="bigfix:root:besrelay" "$click.name2$"&amp;earliest=$earliest$&amp;latest=$latest$</link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Database Initialization &amp; SQL Errors</title>
+      <table>
+        <search>
+          <query>index=bigfix sourcetype="bigfix:root:besrelay" "Database Error:"
+| rex field=_raw "\s-\s(?&lt;Thread_or_Process&gt;[^\-]+)\s-\s(?&lt;Error_Message&gt;.*Database Error:.*)"
+| table _time, Thread_or_Process, Error_Message
+| sort - _time</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+        </search>
+        <option name="drilldown">row</option>
+        <drilldown>
+          <link target="_blank">search?q=index=bigfix sourcetype="bigfix:root:besrelay" "Database Error:"&amp;earliest=$earliest$&amp;latest=$latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <title>Network Gather Timeouts (HTTP / GetURL)</title>
+      <table>
+        <search>
+          <query>index=bigfix sourcetype="bigfix:root:besrelay" ("HTTP Error" OR "GetURL failure")
+| rex field=_raw "\s-\s(?&lt;Thread_or_Process&gt;[^\-]+)\s-\s(?&lt;Error_Message&gt;.*(?:HTTP Error|GetURL).*)"
+| table _time, Thread_or_Process, Error_Message
+| sort - _time</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+        </search>
+        <option name="drilldown">row</option>
+        <drilldown>
+          <link target="_blank">search?q=index=bigfix sourcetype="bigfix:root:besrelay" ("HTTP Error" OR "GetURL failure")&amp;earliest=$earliest$&amp;latest=$latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+   <panel>
+      <title>Missing Site IDs / Gather Failures</title>
+      <table>
+        <search>
+          <query>index=bigfix sourcetype="bigfix:root:besrelay" "find site id"
+| search _raw="*Unable to find site id*"
+| rex field=_raw "(?&lt;Error_Message&gt;Unable to find site id.*)"
+| table _time, Error_Message
+| sort - _time</query>
+          <earliest>0</earliest>
+          <latest>$global_time.latest$</latest>
+        </search>
+        <option name="drilldown">row</option>
+        <drilldown>
+          <link target="_blank">search?q=index=bigfix sourcetype="bigfix:root:besrelay" "find site id"&amp;earliest=0&amp;latest=$latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+</dashboard>

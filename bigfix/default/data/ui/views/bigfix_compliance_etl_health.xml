@@ -1,0 +1,101 @@
+<form version="1.1" theme="dark">
+  <label>BigFix Compliance ETL Health &amp; Performance</label>
+  <description>Monitors ETL task duration, item processing volume, and database cleanup operations.</description>
+  
+  <fieldset submitButton="false">
+    <input type="time" token="tok_time">
+      <label>Global Time Range</label>
+      <default>
+        <earliest>0</earliest>
+        <latest></latest>
+      </default>
+    </input>
+  </fieldset>
+
+  <row>
+    <panel>
+      <title>Longest Running ETL Tasks (Duration)</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:bfc:import" "ETL Datasource task" "Success"
+| rex field=_raw "\(\+(?<duration>\d+:\d+:\d+\.\d+)\)\s+INFO:\s+ETL Datasource task: from Data Source -\s+(?<task_name>[^\(]+)"
+| eval task_name = trim(task_name)
+| search duration="*" task_name="*"
+| stats max(duration) AS "Max Duration (H:M:S)", latest(_time) AS "Latest Import" by task_name
+| rename task_name AS "ETL Task"
+| fieldformat "Latest Import" = strftime('Latest Import', "%Y-%m-%d %H:%M:%S")
+| sort - "Max Duration (H:M:S)"
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Volume of Items Processed by Component</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:bfc:import" "items:"
+| rex field=_raw "INFO:\s+(?<component>[^\s]+)\s+items:\s+(?<item_count>\d+)"
+| search component="*"
+| stats sum(item_count) AS "Total Items", latest(_time) AS "Latest Import" by component
+| rename component AS "Compliance Component"
+| fieldformat "Latest Import" = strftime('Latest Import', "%Y-%m-%d %H:%M:%S")
+| sort - "Total Items"
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>ETL Errors &amp; Exceptions</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:bfc:import" ERROR
+| rex field=_raw "ERROR:\s+(?<error_message>.*)"
+| eval error_message=coalesce(error_message, _raw)
+| stats count by error_message
+| rename error_message AS "Error Message", count AS "Occurrences"
+| sort - Occurrences
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">cell</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank">search?q=index="bigfix" sourcetype="bigfix:bfc:import" ERROR "$row.Error Message$"&amp;earliest=$tok_time.earliest$&amp;latest=$tok_time.latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <title>Orphaned Checks Cleanup Volume</title>
+      <chart>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:bfc:import" "deleting orphaned check results"
+| timechart count AS "Orphaned Checks Deleted" span=1m
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="charting.axisTitleX.text">Time</option>
+        <option name="charting.axisTitleY.text">Checks Deleted</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+</form>

@@ -1,0 +1,107 @@
+<form version="1.1" theme="dark">
+  <label>BigFix Remote Control Health &amp; Security</label>
+  <description>Monitors TRC server LDAP syncs, Broker heartbeats, user session activity, and configuration errors.</description>
+  
+  <fieldset submitButton="false">
+    <input type="time" token="tok_time">
+      <label>Global Time Range</label>
+      <default>
+        <earliest>0</earliest>
+        <latest></latest>
+      </default>
+    </input>
+  </fieldset>
+
+  <row>
+    <panel>
+      <title>LDAP Synchronization Performance</title>
+      <chart>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:rc:trc" "LDAP: Total execution time"
+| rex "was (?<minutes>\d+) Minutes (?<seconds>[\d\.]+) Seconds"
+| eval duration_secs = (minutes * 60) + seconds
+| timechart avg(duration_secs) AS "Avg Sync Duration (s)" max(duration_secs) AS "Max Sync Duration (s)"
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Active Broker Health &amp; Versions</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:rc:trc" "Broker HeartBeat"
+| rex "from \[(?<broker_name>[^\]]+)\] Version \[(?<version>[^\]]+)\]"
+| stats count AS "Heartbeat Count", latest(_time) AS "Last Heartbeat" by broker_name, version
+| fieldformat "Last Heartbeat" = strftime('Last Heartbeat', "%Y-%m-%d %H:%M:%S")
+| rename broker_name AS "Broker Name", version AS "TRC Version"
+| sort - "Last Heartbeat"
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">cell</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank">search?q=index="bigfix" sourcetype="bigfix:rc:trc" "Broker HeartBeat" "$row.Broker Name$"&amp;earliest=$tok_time.earliest$&amp;latest=$tok_time.latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>User Logins &amp; Session Rejections</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:rc:trc" ("LiteWebPortal Login" OR "Session rejected")
+| eval action = if(match(_raw, "LiteWebPortal Login"), "Successful Login", "Session Rejected / Timeout")
+| rex "User \[(?<user>[^\]]+)\]"
+| eval user = coalesce(user, "System/Unknown")
+| stats count AS "Events", latest(_time) AS "Latest Event Timestamp" by action, user
+| fieldformat "Latest Event Timestamp" = strftime('Latest Event Timestamp', "%Y-%m-%d %H:%M:%S")
+| rename action AS "Session Event", user AS "Account"
+| sort - "Latest Event Timestamp"
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">cell</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank">search?q=index="bigfix" sourcetype="bigfix:rc:trc" "$row.Session Event$" "$row.Account$"&amp;earliest=$tok_time.earliest$&amp;latest=$tok_time.latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <title>System Errors &amp; Config Warnings</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:rc:trc" ERROR
+| rex "\[ERROR\]\s+-\s+(?<error_message>.*)"
+| eval error_message=coalesce(error_message, _raw)
+| stats count AS "Occurrences", latest(_time) AS "Latest Occurrence" by error_message
+| fieldformat "Latest Occurrence" = strftime('Latest Occurrence', "%Y-%m-%d %H:%M:%S")
+| rename error_message AS "Error Message"
+| sort - Occurrences
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">cell</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank">search?q=index="bigfix" sourcetype="bigfix:rc:trc" ERROR "$row.Error Message$"&amp;earliest=$tok_time.earliest$&amp;latest=$tok_time.latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+</form>

@@ -1,0 +1,129 @@
+<form version="1.1" theme="dark">
+  <label>BigFix Security &amp; Governance</label>
+  <description>Comprehensive audit trail for BigFix operator actions, logins, and configurations.</description>
+  <fieldset submitButton="false">
+    <input type="time" token="tok_time">
+      <label>Global Time Range</label>
+      <default>
+        <earliest>-7d@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="text" token="tok_operator">
+      <label>Operator (Wildcard *)</label>
+      <default>*</default>
+      <initialValue>*</initialValue>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <title>Login Trends by Interface</title>
+      <chart>
+        <search>
+          <query>
+            <![CDATA[
+index="bigfix" sourcetype="bigfix:root:audit" "LOGIN"
+| rex field=_raw "^(?<format_version>[^\|]*)\|(?<timestamp>[^\|]*)\|(?<message_priority>[^\|]*)\|(?<username>[^\|]*)\|(?<event_source>[^\|]*)\|(?<event_label>[^\|]*)\|(?<event_type>[^\|]*)\|(?<ip_address>[^\|]*)\|(?<message>.*)$"
+| search event_type="LOGIN" AND username!="SYSTEM" AND username!="" AND username="$tok_operator$"
+| timechart count by event_source
+          ]]>
+          </query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Failed Login Attempts</title>
+      <table>
+        <search>
+          <query>
+            <![CDATA[
+index="bigfix" sourcetype="bigfix:root:audit" ("failed" OR message_priority="ERROR")
+| rex field=_raw "^(?<format_version>[^\|]*)\|(?<timestamp>[^\|]*)\|(?<message_priority>[^\|]*)\|(?<username>[^\|]*)\|(?<event_source>[^\|]*)\|(?<event_label>[^\|]*)\|(?<event_type>[^\|]*)\|(?<ip_address>[^\|]*)\|(?<message>.*)$"
+| search username="$tok_operator$"
+| stats count by username, ip_address, message
+| rename username AS Operator, ip_address AS "IP Address", message AS "Error Details", count AS "Failures"
+| sort - Failures
+          ]]>
+          </query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Top Deployment Issuers (Fixlets &amp; Tasks)</title>
+      <chart>
+        <search>
+          <query>
+            <![CDATA[
+index="bigfix" sourcetype="bigfix:root:audit" ("FIXLET" OR "TASK" OR "fixlet" OR "task") "CREATE"
+| rex field=_raw "^(?<format_version>[^\|]*)\|(?<timestamp>[^\|]*)\|(?<message_priority>[^\|]*)\|(?<username>[^\|]*)\|(?<event_source>[^\|]*)\|(?<event_label>[^\|]*)\|(?<event_type>[^\|]*)\|(?<ip_address>[^\|]*)\|(?<message>.*)$"
+| search event_label IN ("FIXLET", "TASK", "fixlet", "task") event_type="CREATE" username!="SYSTEM" AND username!="" AND username="$tok_operator$"
+| stats count by username
+| sort - count
+          ]]>
+          </query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="charting.chart">bar</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Manual Computer Deletions</title>
+      <table>
+        <search>
+          <query>
+            <![CDATA[
+index="bigfix" sourcetype="bigfix:root:audit" "COMPUTER" "DELETE"
+| rex field=_raw "^(?<format_version>[^\|]*)\|(?<timestamp>[^\|]*)\|(?<message_priority>[^\|]*)\|(?<username>[^\|]*)\|(?<event_source>[^\|]*)\|(?<event_label>[^\|]*)\|(?<event_type>[^\|]*)\|(?<ip_address>[^\|]*)\|(?<message>.*)$"
+| search event_label="COMPUTER" event_type="DELETE" username!="SYSTEM" AND username!="" AND username="$tok_operator$"
+| stats count by username, message
+| rename username AS Operator, message AS "Deletion Details", count AS "Total Deleted"
+| sort - "Total Deleted"
+          ]]>
+          </query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Administrative Changes Audit Trail (Roles, Sites, Settings &amp; Users)</title>
+      <table>
+        <search>
+          <query>
+            <![CDATA[
+index="bigfix" sourcetype="bigfix:root:audit" ("USER" OR "ROLE" OR "SETTING" OR "SITE") ("CREATE" OR "UPDATE" OR "DELETE")
+| rex field=_raw "^(?<format_version>[^\|]*)\|(?<timestamp>[^\|]*)\|(?<message_priority>[^\|]*)\|(?<username>[^\|]*)\|(?<event_source>[^\|]*)\|(?<event_label>[^\|]*)\|(?<event_type>[^\|]*)\|(?<ip_address>[^\|]*)\|(?<message>.*)$"
+| search event_label IN ("USER", "ROLE", "SETTING", "SITE") event_type IN ("CREATE", "UPDATE", "DELETE") username!="SYSTEM" AND username!="" AND username="$tok_operator$"
+| table timestamp, username, event_type, event_label, message
+| rename timestamp AS Timestamp, username AS Operator, event_type AS Action, event_label AS "System Component", message AS Details
+| sort - Timestamp
+          ]]>
+          </query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>

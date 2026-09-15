@@ -1,0 +1,99 @@
+<form version="1.1" theme="dark">
+  <label>BigFix GatherDB Health &amp; Performance</label>
+  <description>Monitors database imports, content updates, and critical infrastructure failures.</description>
+  <fieldset submitButton="false">
+    <input type="time" token="tok_time">
+      <label>Global Time Range</label>
+      <default>
+        <earliest>-30d@d</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <title>Top GatherDB Errors (Disk, SQL, &amp; System)</title>
+      <table>
+        <search>
+          <query>
+            <![CDATA[
+index="bigfix" sourcetype="bigfix:root:gatherdb" ("ERROR" OR "Exception" OR "File error" OR "Connection failed")
+| rex field=_raw "-- (?<error_message>.*)"
+| eval error_message=coalesce(error_message, _raw)
+| search error_message="*ERROR*" OR error_message="*Exception*" OR error_message="*File error*" OR error_message="*Connection failed*"
+| stats count by error_message
+| rename error_message AS "Error Details", count AS "Occurrences"
+| sort - Occurrences
+          ]]>
+          </query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <title>External Connection Failures</title>
+      <chart>
+        <search>
+          <query>
+            <![CDATA[
+index="bigfix" sourcetype="bigfix:root:gatherdb" (*HTTPGet* OR *establish*)
+| eval Error_Type = case(searchmatch("*HTTPGet*"), "HTTP Timeout (Port 52311)", searchmatch("*establish*"), "Gather Mirror Reachability Failure", 1==1, "Other Connection Error")
+| stats count by Error_Type
+| sort - count
+          ]]>
+          </query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Most Frequently Updated Sites</title>
+      <table>
+        <search>
+          <query>
+            <![CDATA[
+index="bigfix" sourcetype="bigfix:root:gatherdb" "completed successfully"
+| rex field=_raw "Import of version (?<site_version>\d+) of site (?<site_name>.*) completed successfully"
+| search site_name="*"
+| stats count AS Updates, max(site_version) AS "Latest Version" by site_name
+| rename site_name AS "Site Name"
+| sort - Updates
+          ]]>
+          </query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <title>GatherDB Service Restarts</title>
+      <table>
+        <search>
+          <query>
+            <![CDATA[
+index="bigfix" sourcetype="bigfix:root:gatherdb" "GatherDB version" "starting"
+| rex field=_raw "^(?<timestamp>[^-]+-\d{4}) -- GatherDB version (?<version>[\d\.]+) starting"
+| table timestamp, version
+| rename timestamp AS Timestamp, version AS "GatherDB Version"
+| sort - Timestamp
+          ]]>
+          </query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>

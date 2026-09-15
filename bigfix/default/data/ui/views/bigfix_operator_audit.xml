@@ -1,0 +1,48 @@
+<form version="1.1" theme="dark">
+  <label>BigFix Operator Audit</label>
+  <fieldset submitButton="false">
+    <input type="time" token="tok_time">
+      <label>Time Range</label>
+      <default>
+        <earliest>-7d@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="text" token="tok_operator">
+      <label>Operator</label>
+      <default>*</default>
+      <initialValue>*</initialValue>
+    </input>
+    <input type="dropdown" token="tok_action">
+      <label>Action</label>
+      <choice value="*">All</choice>
+      <choice value="CREATE">Create</choice>
+      <choice value="UPDATE">Update</choice>
+      <choice value="DELETE">Delete</choice>
+      <default>*</default>
+      <initialValue>*</initialValue>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <table>
+        <search>
+          <query>
+            <![CDATA[
+index="bigfix" sourcetype="bigfix:root:audit" ("CREATE" OR "UPDATE" OR "DELETE")
+| rex field=_raw "^(?<format_version>[^\|]*)\|(?<timestamp>[^\|]*)\|(?<message_priority>[^\|]*)\|(?<username>[^\|]*)\|(?<event_source>[^\|]*)\|(?<event_label>[^\|]*)\|(?<event_type>[^\|]*)\|(?<ip_address>[^\|]*)\|(?<message>.*)$"
+| search event_type IN ("CREATE", "UPDATE", "DELETE") AND event_type="$tok_action$" AND username="$tok_operator$" AND username!="SYSTEM" AND username!=""
+| table timestamp, username, event_type, event_label, event_source, message
+| rename timestamp AS Timestamp, username AS Operator, event_type AS Action, event_label AS "Affected Data", event_source AS Source, message AS Details
+| sort - Timestamp
+          ]]>
+          </query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>

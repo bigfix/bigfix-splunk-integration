@@ -1,0 +1,98 @@
+<form version="1.1" theme="dark">
+  <label>BigFix FillDB Health &amp; Performance</label>
+  <description>Monitors database connectivity, buffer I/O health, and dropped endpoint reports.</description>
+  
+  <fieldset submitButton="false">
+    <input type="time" token="tok_time">
+      <label>Global Time Range</label>
+      <default>
+        <earliest>0</earliest>
+        <latest></latest>
+      </default>
+    </input>
+  </fieldset>
+
+  <row>
+    <panel>
+      <title>Top Database Connection Errors</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:root:filldb" "Database Error"
+| rex field=_raw "Database Error:\s+(?<error_message>.*)"
+| eval error_message=coalesce(error_message, _raw)
+| stats count by error_message
+| rename error_message AS "Database Error Details", count AS "Occurrences"
+| sort - Occurrences
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Top Rejected Endpoints (Corrupted/Unsigned Reports)</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:root:filldb" ("Discarding message from computer" OR "Unable to parse chunk")
+| rex field=_raw "computer (?<computer_id>\d+)"
+| rex field=_raw "(discarding:\s+|Client report\s+)(?<error_reason>[^\.\(]+)"
+| eval error_reason=coalesce(error_reason, "Signature or Parsing Error")
+| search computer_id="*"
+| stats count AS "Dropped Reports", latest(_time) AS "Latest Rejection" by computer_id, error_reason
+| rename computer_id AS "Computer ID", error_reason AS "Rejection Reason"
+| fieldformat "Latest Rejection" = strftime('Latest Rejection', "%Y-%m-%d %H:%M:%S")
+| sort - "Latest Rejection"
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Buffer Directory I/O Bottlenecks</title>
+      <chart>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:root:filldb" "File IO error" "bufferdir"
+| timechart count AS "I/O Read Failures"
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="charting.axisTitleX.text">Time</option>
+        <option name="charting.axisTitleY.text">Error Count</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>FillDB Service Restarts &amp; Versions</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:root:filldb" "FillDB version" "starting"
+| rex field=_raw "^(?<timestamp>[^-]+-\d{4})\s+--\s+(?<pid>\d+)\s+--\s+FillDB version\s+(?<version>[\d\.]+)\s+starting"
+| eval sortable_time = strptime(timestamp, "%a, %d %b %Y %H:%M:%S %z")
+| sort - sortable_time
+| table timestamp, pid, version
+| rename timestamp AS Timestamp, pid AS "Process ID", version AS "FillDB Version"
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>

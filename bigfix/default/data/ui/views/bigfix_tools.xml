@@ -1,0 +1,140 @@
+<form version="1.1" theme="dark">
+  <label>BigFix Maintenance Tools</label>
+  <description>Monitors database cleanup operations, endpoint lifecycle, and BESTools performance across Audit, Computer, and Health cleanup utilities.</description>
+  
+  <fieldset submitButton="false">
+    <input type="time" token="tok_time">
+      <label>Global Time Range</label>
+      <default>
+        <earliest>0</earliest>
+        <latest></latest>
+      </default>
+    </input>
+  </fieldset>
+
+  <row depends="$hidden_for_css$">
+    <panel>
+      <html>
+        <style>
+          /* Forces all drillable table cells to be white */
+          .dashboard-panel table.table tbody td {
+              color: #FFFFFF !important;
+          }
+          /* Forces any actual HTML anchor links to be white */
+          .dashboard-panel table.table tbody td a {
+              color: #FFFFFF !important;
+          }
+          /* Ensures the text stays white when your mouse hovers over the row */
+          .dashboard-panel table.table tbody tr:hover td {
+              color: #FFFFFF !important;
+          }
+        </style>
+      </html>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Total Database Rows Purged Over Time</title>
+      <chart>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:root:bestools" "removed" "rows"
+| rex field=_raw "BES (?<Tool>Computer Remover|Audit Trail Cleaner|Health and Cleanup) removed (?<rows_deleted>\d+) rows"
+| search Tool="*"
+| timechart span=1d sum(rows_deleted) AS "Rows Purged" by Tool
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.axisTitleX.text">Time</option>
+        <option name="charting.axisTitleY.text">Total Rows Deleted</option>
+        <option name="charting.drilldown">all</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank"><![CDATA[search?q=search index="bigfix" sourcetype="bigfix:root:bestools" "removed" "rows"&earliest=$earliest$&latest=$latest$]]></link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Endpoint Lifecycle - Computers Removed</title>
+      <chart>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:root:bestools" ("Total number of expired Computers:" OR "Total number of Computers affected:" OR "Total Number of Duplicated Computers:")
+| rex field=_raw "Total number of expired Computers:\s+(?<Expired>\d+)"
+| rex field=_raw "Total number of Computers affected:\s+(?<Inactive>\d+)"
+| rex field=_raw "Total Number of Duplicated Computers:\s+(?<Duplicated>\d+)"
+| timechart span=1d max(Expired) AS Expired, max(Inactive) AS Inactive, max(Duplicated) AS Duplicated
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.axisTitleX.text">Time</option>
+        <option name="charting.axisTitleY.text">Endpoints Removed</option>
+        <option name="charting.drilldown">all</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank"><![CDATA[search?q=search index="bigfix" sourcetype="bigfix:root:bestools" ("Total number of expired Computers:" OR "Total number of Computers affected:" OR "Total Number of Duplicated Computers:")&earliest=$earliest$&latest=$latest$]]></link>
+        </drilldown>
+      </chart>
+    </panel>
+    <panel>
+      <title>BES Health and Cleanup - Action Expirations</title>
+      <chart>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:root:bestools" "Total number of expired or stopped actions"
+| rex field=_raw "Total number of expired or stopped actions :\s+(?<Stopped_Actions>\d+)"
+| timechart span=1d max(Stopped_Actions) AS "Stopped/Expired Actions Cleaned"
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="charting.axisTitleX.text">Time</option>
+        <option name="charting.axisTitleY.text">Actions Cleaned</option>
+        <option name="charting.drilldown">all</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank"><![CDATA[search?q=search index="bigfix" sourcetype="bigfix:root:bestools" "Total number of expired or stopped actions"&earliest=$earliest$&latest=$latest$]]></link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Top Tables Contributing to Database Bloat (Audit Trail Cleaner)</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:root:bestools" "Number of rows in" "table:"
+| rex field=_raw "Number of rows in (the )?(?<Table_Name>[^\:]+) table:\s+(?<Row_Count>\d+)"
+| search Table_Name="*"
+| stats sum(Row_Count) as "Total Rows Cleaned" by Table_Name
+| rename Table_Name AS "SQL Database Table"
+| sort - "Total Rows Cleaned"
+| head 15
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">row</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank"><![CDATA[search?q=search index="bigfix" sourcetype="bigfix:root:bestools" "$row.SQL Database Table$"&earliest=$tok_time.earliest$&latest=$tok_time.latest$]]></link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+</form>

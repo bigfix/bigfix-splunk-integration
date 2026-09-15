@@ -1,0 +1,117 @@
+<form version="1.1" theme="dark">
+  <label>BigFix Inventory ETL Health &amp; Performance</label>
+  <description>Monitors BFI task durations, parsing errors, capacity scans, and VM Manager synchronization.</description>
+  
+  <fieldset submitButton="false">
+    <input type="time" token="tok_time">
+      <label>Global Time Range</label>
+      <default>
+        <earliest>0</earliest>
+        <latest></latest>
+      </default>
+    </input>
+  </fieldset>
+
+  <row>
+    <panel>
+      <title>Longest Running BFI ETL Tasks</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:bfi:import" "Success" ("ETL from" OR "Running ETL")
+| rex field=_raw "\(\+(?<duration>\d+:\d+:\d+\.\d+)\)\s+INFO:\s+(?:ETL from Data Source -|Running ETL|ETL from)\s+(?<task_name>.*?)(?:\s+\(|:\s+Success)"
+| eval task_name = trim(task_name)
+| search duration="*" task_name="*"
+| stats max(duration) AS "Max Duration (H:M:S)", latest(_time) AS "Latest Import" by task_name
+| fieldformat "Latest Import" = strftime('Latest Import', "%Y-%m-%d %H:%M:%S")
+| rename task_name AS "ETL Task"
+| sort - "Max Duration (H:M:S)"
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">row</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank">search?q=index="bigfix" sourcetype="bigfix:bfi:import" "$row.ETL Task$"&amp;earliest=$tok_time.earliest$&amp;latest=$tok_time.latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <title>BFI Errors &amp; Parsing Exceptions</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:bfi:import" ERROR
+| rex field=_raw "ERROR:\s+(?<error_message>.*)"
+| eval error_message=coalesce(error_message, _raw)
+| stats count AS "Occurrences", latest(_time) AS "Latest Error" by error_message
+| fieldformat "Latest Error" = strftime('Latest Error', "%Y-%m-%d %H:%M:%S")
+| rename error_message AS "Error Message"
+| sort - Occurrences
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">cell</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank">search?q=index="bigfix" sourcetype="bigfix:bfi:import" ERROR "$row.Error Message$"&amp;earliest=$tok_time.earliest$&amp;latest=$tok_time.latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Hardware Capacity Scan Import Health</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:bfi:import" "CapacityScanImportStep" "capacity scan packages were downloaded"
+| rex field=_raw "(?<downloaded>\d+) capacity scan packages were downloaded"
+| rex field=_raw "(?<imported>\d+) files with capacity scan data were successfully imported"
+| rex field=_raw "(?<invalid>\d+) files had invalid names"
+| rex field=_raw "For (?<failed>\d+) scan packages or files the import failed"
+| stats latest(downloaded) AS "Packages Downloaded", latest(imported) AS "Successfully Imported", latest(invalid) AS "Invalid Names", latest(failed) AS "Failed Imports" by _time
+| fieldformat _time = strftime(_time, "%Y-%m-%d %H:%M:%S")
+| rename _time AS "Import Timestamp"
+| sort - "Import Timestamp"
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">row</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank">search?q=index="bigfix" sourcetype="bigfix:bfi:import" "CapacityScanImportStep"&amp;earliest=$tok_time.earliest$&amp;latest=$tok_time.latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <title>VM Manager Sync Health (VMMAN)</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:bfi:import" "ILMTCoreVMMan::printStatistics"
+| rex field=_raw "(?<vmm_files>\d+) files from (?<vmm_count>\d+) VM Managers"
+| rex field=_raw "Processed clusters: (?<clusters>\d+)"
+| rex field=_raw "processed hosts: (?<hosts>\d+)"
+| rex field=_raw "processed guests: (?<guests>\d+)"
+| stats latest(vmm_count) AS "VM Managers Syncing", latest(vmm_files) AS "Files Processed", latest(clusters) AS "Clusters Found", latest(hosts) AS "Hosts Found", latest(guests) AS "Guests (VMs) Found" by _time
+| fieldformat _time = strftime(_time, "%Y-%m-%d %H:%M:%S")
+| rename _time AS "Import Timestamp"
+| sort - "Import Timestamp"
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">row</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank">search?q=index="bigfix" sourcetype="bigfix:bfi:import" "ILMTCoreVMMan::printStatistics"&amp;earliest=$tok_time.earliest$&amp;latest=$tok_time.latest$</link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+</form>

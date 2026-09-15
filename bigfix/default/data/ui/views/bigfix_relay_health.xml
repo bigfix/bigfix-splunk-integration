@@ -1,0 +1,155 @@
+<form version="1.1" theme="dark">
+  <label>BigFix Relay Health</label>
+  <description>Monitors upstream connectivity, gather failures, and buffer health across all BES Relays.</description>
+  
+  <fieldset submitButton="false">
+    <input type="time" token="tok_time">
+      <label>Global Time Range</label>
+      <default>
+        <earliest>-7d@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="text" token="tok_host">
+      <label>Host / Relay Name</label>
+      <default>*</default>
+      <initialValue>*</initialValue>
+    </input>
+  </fieldset>
+
+  <row depends="$hidden_for_css$">
+    <panel>
+      <html>
+        <style>
+          .dashboard-panel table.table tbody td { color: #FFFFFF !important; }
+          .dashboard-panel table.table tbody td a { color: #FFFFFF !important; }
+          .dashboard-panel table.table tbody tr:hover td { color: #FFFFFF !important; }
+        </style>
+      </html>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Upstream Connectivity &amp; Registration Failures</title>
+      <chart>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:relay" source="*logfile.txt" host="$tok_host$" ("HTTP Error" OR "Socket Error" OR "Timeout was reached" OR "Failed to connect")
+| eval Error_Type = case(
+    searchmatch("*HTTP Error 28*") OR searchmatch("*Timeout was reached*"), "HTTP Timeout (Error 28)",
+    searchmatch("*HTTP Error 6*") OR searchmatch("*Couldn't resolve host*"), "DNS / Resolution Failure (Error 6)",
+    searchmatch("*HTTP Error 7*") OR searchmatch("*Couldn't connect to server*"), "Connection Refused (Error 7)",
+    searchmatch("*Socket Error: Windows Error 0x2745*"), "Connection Aborted by Host (0x2745)",
+    searchmatch("*HTTP Error 52*") OR searchmatch("*Empty reply*"), "Empty Reply / Dropped (Error 52)",
+    1==1, "Other Connection Error"
+)
+| timechart span=1h count by Error_Type
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.axisTitleX.text">Time</option>
+        <option name="charting.axisTitleY.text">Error Count</option>
+        <option name="charting.drilldown">all</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank"><![CDATA[search?q=search index="bigfix" sourcetype="bigfix:relay" source="*logfile.txt" host="$tok_host$" ("HTTP Error" OR "Socket Error" OR "Timeout was reached" OR "Failed to connect")&earliest=$earliest$&latest=$latest$]]></link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Top Failing Relays (By Error Volume)</title>
+      <chart>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:relay" source="*logfile.txt" host="$tok_host$" ("HTTP Error" OR "Socket Error" OR "GetURL failure" OR "Uncaught exception")
+| stats count AS "Error Volume" by host
+| sort - "Error Volume"
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.drilldown">all</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank"><![CDATA[search?q=search index="bigfix" sourcetype="bigfix:relay" source="*logfile.txt" host="$click.value$" ("HTTP Error" OR "Socket Error" OR "GetURL failure" OR "Uncaught exception")&earliest=$tok_time.earliest$&latest=$tok_time.latest$]]></link>
+        </drilldown>
+      </chart>
+    </panel>
+    <panel>
+      <title>Site Gather &amp; Synchronization Errors</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:relay" source="*logfile.txt" host="$tok_host$" ("GetURL failure" OR "HTTPS connection" OR "GetExpectedVersionOfParent Error")
+| rex field=_raw "(?<Error_Details>(GetURL failure|HTTPS connection .* was unsuccessful|GetExpectedVersionOfParent Error).*)"
+| eval Error_Details=coalesce(Error_Details, _raw)
+| stats count by host, Error_Details
+| rename host AS "Relay", Error_Details AS "Gather Error", count AS "Occurrences"
+| sort - Occurrences
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">row</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank"><![CDATA[search?q=search index="bigfix" sourcetype="bigfix:relay" source="*logfile.txt" host="$row.Relay$" "$row.Gather Error$"&earliest=$tok_time.earliest$&latest=$tok_time.latest$]]></link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+
+  <row>
+    <panel>
+      <title>Buffer &amp; Disk Bottlenecks</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:relay" source="*logfile.txt" host="$tok_host$" ("Disk full" OR "buffer full" OR "MaxArchiveSize" OR "FastForwardBuffer" OR "HTTP Error 23")
+| table _time, host, _raw
+| rename host AS Relay, _raw AS "Log Entry"
+| sort - _time
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">row</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank"><![CDATA[search?q=search index="bigfix" sourcetype="bigfix:relay" source="*logfile.txt" host="$row.Relay$" $row.Log Entry|s$&earliest=$tok_time.earliest$&latest=$tok_time.latest$]]></link>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <title>Relay Service Restarts</title>
+      <table>
+        <search>
+          <query><![CDATA[
+index="bigfix" sourcetype="bigfix:relay" source="*logfile.txt" host="$tok_host$" ("BES Relay shutting down" OR "BigFix Relay version")
+| eval Action = if(searchmatch("*shutting down*"), "Stopping", "Starting")
+| stats count, latest(_time) AS "Last Event" by host, Action
+| fieldformat "Last Event" = strftime('Last Event', "%Y-%m-%d %H:%M:%S")
+| rename host AS Relay
+| sort - "Last Event"
+          ]]></query>
+          <earliest>$tok_time.earliest$</earliest>
+          <latest>$tok_time.latest$</latest>
+        </search>
+        <option name="drilldown">row</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <link target="_blank"><![CDATA[search?q=search index="bigfix" sourcetype="bigfix:relay" source="*logfile.txt" host="$row.Relay$" (if("$row.Action$"=="Stopping", "BES Relay shutting down", "BigFix Relay version"))&earliest=$tok_time.earliest$&latest=$tok_time.latest$]]></link>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+</form>
