@@ -1,0 +1,23 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create tar archive of bigfix folder
+        run: tar -cf bigfix.tar bigfix
+
+      - name: Upload archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bigfix
+          path: bigfix.tar
