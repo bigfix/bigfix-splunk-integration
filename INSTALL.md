@@ -28,7 +28,7 @@ NOTE: In the inputs.conf file, verify the path to the log files are correct. Cur
 * Upload the bigfix.tar file.
 * Restart Splunk Web if prompted.
 5. Installation Step 3: Configure and Deploy the TAs (Deployment Server)
-* Extract the provided TA folders (TA-bigfix\_Root, TA-bigfix\_BFI, etc.) into the /etc/deployment-apps/ directory on your Deployment Server.
+* Extract the provided TA folders (TA-bigfix\_Root, TA-bigfix\_BFI, etc.) into the /etc/deployment-apps/ directory on your Deployment Server. These folders can be found in Releases in the Source Code.zip file.
 * Enable Data Collection: By default, all data collection is disabled in the default/inputs.conf files. For each TA you intend to deploy:
 
   * Create a local directory (e.g., TA-bigfix\_Root/local/inputs.conf).
